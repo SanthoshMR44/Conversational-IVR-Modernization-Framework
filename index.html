@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IVR Mobile Simulator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+/* ===== MERGED FROM style.css ===== */
+body {
+  font-family: Arial, sans-serif;
+  background: #f2bbbb;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  color: #fff;
+}
+.phone-container {
+  width: 350px;
+  margin: 40px auto;
+  background: #c3e995;
+  border-radius: 30px;
+  padding: 22px;
+  box-shadow: 0 16px 35px rgba(0,0,0,0.55);
+  border: 2px solid #222;
+  font-family: "Poppins", sans-serif;
+  position: relative;
+}
+.waveform {
+  visibility: hidden;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+  height: 30px;
+}
+.waveform.active {
+   visibility: visible;
+}
+.wave {
+  width: 4px;
+  margin: 0 6px;
+  background: #000000;
+  border-radius: 10px;
+  animation: wave 1s infinite ease-in-out;
+}
+.wave:nth-child(2) { animation-delay: .2s; }
+.wave:nth-child(3) { animation-delay: .4s; }
+.wave:nth-child(4) { animation-delay: .6s; }
+
+@keyframes wave {
+  0%,100% { height: 10px; }
+  50% { height: 27px; }
+}
+.screen {
+  height: fit-content;
+  background: linear-gradient(#0a192f,#06121f);
+  color: #e0e9ff;
+  border-radius: 15px;
+  padding: 12px;
+  box-sizing: border-box;
+  font-size: 17px;
+  text-align: center;
+  border: 2px solid #112d47;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.call-status {
+  text-align: center;
+  color: #000000;
+  margin: 7px 0;
+  font-size: 15px;
+  height: 20px;
+}
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.keypad .digit {
+  background: #222;
+  color: #f4f4f4;
+  border: 2px solid #333;
+  font-size: 22px;
+  border-radius: 16px;
+  padding: 18px 0;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.keypad .digit small {
+  font-size: 10px;
+  color: #aaa;
+}
+.keypad .digit:active {
+  background: #0f9d58;
+  transform: scale(.94);
+}
+.digit:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+.call-controls {
+  text-align: center;
+  margin-top: 22px;
+}
+#start-btn {
+  background: #00d07b;
+  border: none;
+  padding: 12px 26px;
+  border-radius: 30px;
+  font-size: 17px;
+  cursor: pointer;
+  margin-right: 12px;
+  transition: .2s;
+}
+#end-btn {
+  background: #f06053;
+  border: none;
+  padding: 12px 26px;
+  border-radius: 30px;
+  font-size: 17px;
+  cursor: pointer;
+  transition: .2s;
+}
+</style>
+</head>
+
+<body>
+
+<div class="phone-container">
+
+    <div id="waveform" class="waveform">
+        <div class="wave"></div>
+        <div class="wave"></div>
+        <div class="wave"></div>
+        <div class="wave"></div>
+    </div>
+
+    <div id="ivr-display" class="screen">
+      <div class="welcome message">Press "Start Call"</div>
+    </div>
+
+    <div id="call-status" class="call-status"></div>
+
+    <div id="keypad" class="keypad">
+      <button class="digit" data-digit="1">1</button>
+      <button class="digit" data-digit="2">2</button>
+      <button class="digit" data-digit="3">3</button>
+      <button class="digit" data-digit="4">4</button>
+      <button class="digit" data-digit="5">5</button>
+      <button class="digit" data-digit="6">6</button>
+      <button class="digit" data-digit="7">7</button>
+      <button class="digit" data-digit="8">8</button>
+      <button class="digit" data-digit="9">9</button>
+      <button class="digit" data-digit="*">*</button>
+      <button class="digit" data-digit="0">0</button>
+      <button class="digit" data-digit="#">#</button>
+    </div>
+
+    <div class="call-controls">
+      <button id="start-btn" class="start">Start Call</button>
+      <button id="end-btn" class="end" disabled>End Call</button>
+    </div>
+
+</div>
+
+<script>
+/* ================================================
+   MERGED FRONTEND LOGIC (app.js + dtmf.js + voiceInput.js)
+   ================================================ */
+
+const BASE_URL = "http://127.0.0.1:8000";
+let currentCallId = null;
+let typingSessionId = 0;
+
+/* ---- Utils ---- */
+function ivrDisplay() { return document.getElementById("ivr-display"); }
+function callStatus() { return document.getElementById("call-status"); }
+function waveform() { return document.getElementById("waveform"); }
+
+function stopVoice() {
+    try { speechSynthesis.cancel(); } catch(e){}
+    waveform().classList.remove("active");
+}
+
+function speak(text) {
+    stopVoice();
+    let u = new SpeechSynthesisUtterance(text);
+    u.onstart = () => waveform().classList.add("active");
+    u.onend = () => waveform().classList.remove("active");
+    speechSynthesis.speak(u);
+}
+
+/* ---- Type + Speak ---- */
+async function speakAndType(text) {
+    ivrDisplay().innerText = "";
+    speak(text);
+
+    for (let i = 0; i <= text.length; i++) {
+        ivrDisplay().innerText = text.slice(0, i);
+        await new Promise(r => setTimeout(r, 10));
+    }
+}
+
+/* ---- Start Call ---- */
+document.getElementById("start-btn").onclick = async () => {
+    let res = await fetch(BASE_URL + "/ivr/start", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({})
+    });
+
+    let data = await res.json();
+    currentCallId = data.call_id;
+
+    callStatus().innerText = "Connected";
+    document.getElementById("end-btn").disabled = false;
+    document.getElementById("start-btn").disabled = true;
+
+    speakAndType(data.prompt);
+    startVoiceRecognition();
+};
+
+/* ---- DTMF ---- */
+async function sendDTMF(digit) {
+    if (!currentCallId) return;
+
+    let res = await fetch(BASE_URL + "/ivr/dtmf", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({call_id: currentCallId, digit})
+    });
+
+    let data = await res.json();
+
+    if (data.status === "ended") {
+        speakAndType(data.message);
+        callStatus().innerText = "Call Ended";
+        currentCallId = null;
+        document.getElementById("start-btn").disabled = false;
+        document.getElementById("end-btn").disabled = true;
+    } else {
+        speakAndType(data.prompt);
+    }
+}
+
+/* ---- Bind keypad ---- */
+document.querySelectorAll(".digit").forEach(btn => {
+    btn.onclick = () => sendDTMF(btn.dataset.digit);
+});
+
+/* ---- End Call ---- */
+document.getElementById("end-btn").onclick = () => {
+    currentCallId = null;
+    ivrDisplay().innerText = "Thank you";
+    callStatus().innerText = "Call Ended";
+    document.getElementById("start-btn").disabled = false;
+    document.getElementById("end-btn").disabled = true;
+    stopVoice();
+};
+
+/* ---- Voice Recognition ---- */
+function startVoiceRecognition() {
+    if (!("webkitSpeechRecognition" in window)) return;
+
+    let rec = new webkitSpeechRecognition();
+    rec.lang = "en-IN";
+    rec.continuous = true;
+
+    rec.onresult = (e) => {
+        let text = e.results[e.results.length - 1][0].transcript.toLowerCase();
+        console.log("Voice:", text);
+
+        let map = {
+            booking: "1", Sleeper: "1", AC_Class: "2",
+            status: "2", pnr: "2", cancel: "3",
+            baggage: "4", lost: "1", track: "2",
+            loyalty: "5", feedback: "6", offers: "7",
+            callback: "8", agent: "9", emergency: "0",
+            veg: "1", nonveg: "2", jain: "3"
+        };
+
+        for (let key in map) {
+            if (text.includes(key)) {
+                sendDTMF(map[key]);
+                return;
+            }
+        }
+    };
+
+    rec.start();
+}
+
+</script>
+
+</body>
+</html>
